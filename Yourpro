@@ -1,0 +1,248 @@
+document.addEventListener('DOMContentLoaded', function() {
+    // DOM Elements
+    const uploadBtn = document.getElementById('uploadBtn');
+    const uploadModal = document.getElementById('uploadModal');
+    const closeBtn = document.querySelector('.close-btn');
+    const cancelBtn = document.querySelector('.cancel-btn');
+    const uploadForm = document.getElementById('uploadForm');
+    const dropArea = document.getElementById('dropArea');
+    const videoFileInput = document.getElementById('videoFile');
+    const mainVideo = document.getElementById('mainVideo');
+    const videoList = document.getElementById('videoList');
+    const videoTitle = document.getElementById('videoTitle');
+    const videoDescription = document.getElementById('videoDescription');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+
+    // Sample videos data (in real app, this would come from a server)
+    const sampleVideos = [
+        {
+            id: 1,
+            title: "Beautiful Nature Scenery",
+            description: "Relaxing nature video with mountains and rivers",
+            url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+            thumbnail: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60",
+            views: "1.2M",
+            duration: "5:30"
+        },
+        {
+            id: 2,
+            title: "City Time Lapse",
+            description: "Amazing time lapse of a busy city at night",
+            url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
+            thumbnail: "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60",
+            views: "850K",
+            duration: "3:45"
+        },
+        {
+            id: 3,
+            title: "Coding Tutorial",
+            description: "Learn JavaScript in 10 minutes",
+            url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+            thumbnail: "https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60",
+            views: "2.1M",
+            duration: "10:15"
+        },
+        {
+            id: 4,
+            title: "Travel Vlog",
+            description: "Exploring beautiful beaches around the world",
+            url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+            thumbnail: "https://images.unsplash.com/photo-1506929562872-bb421503ef21?ixlib=rb-1.2.1&auto=format&fit=crop&w=500&q=60",
+            views: "1.5M",
+            duration: "8:20"
+        }
+    ];
+
+    // Initialize with sample videos
+    loadVideos();
+
+    // Modal Controls
+    uploadBtn.addEventListener('click', () => {
+        uploadModal.style.display = 'flex';
+    });
+
+    closeBtn.addEventListener('click', () => {
+        uploadModal.style.display = 'none';
+    });
+
+    cancelBtn.addEventListener('click', () => {
+        uploadModal.style.display = 'none';
+    });
+
+    window.addEventListener('click', (e) => {
+        if (e.target === uploadModal) {
+            uploadModal.style.display = 'none';
+        }
+    });
+
+    // Drag and Drop functionality
+    dropArea.addEventListener('click', () => {
+        videoFileInput.click();
+    });
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, unhighlight, false);
+    });
+
+    function highlight() {
+        dropArea.style.borderColor = '#ff0000';
+        dropArea.style.backgroundColor = '#272727';
+    }
+
+    function unhighlight() {
+        dropArea.style.borderColor = '#444';
+        dropArea.style.backgroundColor = 'transparent';
+    }
+
+    dropArea.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        videoFileInput.files = files;
+        
+        // Update UI to show selected file
+        if (files.length > 0) {
+            const fileName = files[0].name;
+            dropArea.innerHTML = `
+                <i class="fas fa-file-video"></i>
+                <h3>${fileName}</h3>
+                <p>Click to choose another file</p>
+            `;
+        }
+    }
+
+    // Form submission
+    uploadForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData();
+        const videoFile = videoFileInput.files[0];
+        const title = document.getElementById('videoTitleInput').value;
+        const description = document.getElementById('videoDescriptionInput').value;
+        const thumbnail = document.getElementById('videoThumbnail').files[0];
+
+        if (!videoFile) {
+            alert('Please select a video file');
+            return;
+        }
+
+        formData.append('video', videoFile);
+        formData.append('title', title);
+        formData.append('description', description);
+        if (thumbnail) {
+            formData.append('thumbnail', thumbnail);
+        }
+
+        // Simulate upload progress
+        simulateUploadProgress();
+
+        // In a real application, you would send this to your server
+        // Example with fetch API:
+        /*
+        try {
+            const response = await fetch('/upload.php', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                alert('Upload successful!');
+                uploadModal.style.display = 'none';
+                uploadForm.reset();
+                loadVideos(); // Refresh video list
+            } else {
+                alert('Upload failed: ' + result.message);
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Upload failed. Please try again.');
+        }
+        */
+    });
+
+    function simulateUploadProgress() {
+        let progress = 0;
+        const interval = setInterval(() => {
+            progress += 5;
+            progressBar.style.width = `${progress}%`;
+            progressText.textContent = `${progress}%`;
+            
+            if (progress >= 100) {
+                clearInterval(interval);
+                setTimeout(() => {
+                    alert('Upload complete! (This is a demo)');
+                    uploadModal.style.display = 'none';
+                    uploadForm.reset();
+                    resetUploadArea();
+                }, 500);
+            }
+        }, 200);
+    }
+
+    function resetUploadArea() {
+        dropArea.innerHTML = `
+            <i class="fas fa-cloud-upload-alt"></i>
+            <h3>Drag & Drop Video File</h3>
+            <p>or click to browse</p>
+            <input type="file" id="videoFile" accept="video/*" required>
+            <p class="file-info">Max file size: 2GB | Supported formats: MP4, AVI, MOV, MKV</p>
+        `;
+        progressBar.style.width = '0%';
+        progressText.textContent = '0%';
+    }
+
+    // Load videos into sidebar
+    function loadVideos() {
+        videoList.innerHTML = '';
+        sampleVideos.forEach(video => {
+            const videoItem = document.createElement('div');
+            videoItem.className = 'video-item';
+            videoItem.dataset.id = video.id;
+            
+            videoItem.innerHTML = `
+                <img src="${video.thumbnail}" alt="${video.title}" class="video-thumbnail">
+                <div class="video-item-info">
+                    <h3>${video.title}</h3>
+                    <p>${video.views} views • ${video.duration}</p>
+                </div>
+            `;
+            
+            videoItem.addEventListener('click', () => playVideo(video));
+            videoList.appendChild(videoItem);
+        });
+
+        // Play first video by default
+        if (sampleVideos.length > 0) {
+            playVideo(sampleVideos[0]);
+        }
+    }
+
+    // Play selected video
+    function playVideo(video) {
+        mainVideo.src = video.url;
+        videoTitle.textContent = video.title;
+        videoDescription.textContent = video.description;
+        
+        // Highlight selected video
+        document.querySelectorAll('.video-item').forEach(item => {
+            item.style.backgroundColor = '';
+        });
+        document.querySelector(`.video-item[data-id="${video.id}"]`).style.backgroundColor = '#272727';
+    }
+});
