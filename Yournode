@@ -1,0 +1,168 @@
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const mysql = require('mysql2');
+const cors = require('cors');
+const fs = require('fs');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
+app.use('/uploads', express.static('uploads'));
+
+// Create upload directories
+const uploadDirs = ['uploads/videos', 'uploads/thumbnails'];
+uploadDirs.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+});
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        if (file.fieldname === 'video') {
+            cb(null, 'uploads/videos/');
+        } else {
+            cb(null, 'uploads/thumbnails/');
+        }
+    },
+    filename: (req, file, cb) => {
+        const uniqueName = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueName + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({
+    storage: storage,
+    limits: { fileSize: 2 * 1024 * 1024 * 1024 }, // 2GB
+    fileFilter: (req, file, cb) => {
+        if (file.fieldname === 'video') {
+            const allowed = /mp4|avi|mov|mkv|webm/i;
+            const extname = allowed.test(path.extname(file.originalname));
+            const mimetype = allowed.test(file.mimetype);
+            
+            if (extname && mimetype) {
+                return cb(null, true);
+            }
+            cb(new Error('Invalid video format. Allowed: MP4, AVI, MOV, MKV, WEBM'));
+        } else {
+            const allowed = /jpg|jpeg|png|gif/i;
+            const extname = allowed.test(path.extname(file.originalname));
+            const mimetype = allowed.test(file.mimetype);
+            
+            if (extname && mimetype) {
+                return cb(null, true);
+            }
+            cb(new Error('Invalid image format. Allowed: JPG, JPEG, PNG, GIF'));
+        }
+    }
+});
+
+// Database connection
+const db = mysql.createConnection({
+    host: 'localhost',
+    user: 'root',
+    password: '',
+    database: 'videostream'
+});
+
+db.connect(err => {
+    if (err) {
+        console.error('Database connection failed:', err);
+    } else {
+        console.log('Connected to database');
+    }
+});
+
+// Routes
+
+// Get all videos
+app.get('/api/videos', (req, res) => {
+    db.query(
+        'SELECT * FROM videos ORDER BY upload_date DESC',
+        (err, results) => {
+            if (err) {
+                res.status(500).json({ error: err.message });
+            } else {
+                res.json(results);
+            }
+        }
+    );
+});
+
+// Upload video
+app.post('/api/upload', upload.fields([
+    { name: 'video', maxCount: 1 },
+    { name: 'thumbnail', maxCount: 1 }
+]), (req, res) => {
+    try {
+        const { title, description } = req.body;
+        const videoFile = req.files['video'][0];
+        const thumbnailFile = req.files['thumbnail'] ? req.files['thumbnail'][0] : null;
+
+        const video = {
+            title,
+            description,
+            filename: videoFile.filename,
+            thumbnail: thumbnailFile ? thumbnailFile.filename : null,
+            path: videoFile.path
+        };
+
+        db.query(
+            'INSERT INTO videos (title, description, filename, thumbnail) VALUES (?, ?, ?, ?)',
+            [video.title, video.description, video.filename, video.thumbnail],
+            (err, result) => {
+                if (err) {
+                    // Delete uploaded files if database insertion fails
+                    fs.unlinkSync(videoFile.path);
+                    if (thumbnailFile) {
+                        fs.unlinkSync(thumbnailFile.path);
+                    }
+                    res.status(500).json({ error: err.message });
+                } else {
+                    video.id = result.insertId;
+                    res.json({ 
+                        success: true, 
+                        message: 'Video uploaded successfully',
+                        video 
+                    });
+                }
+            }
+        );
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get video by ID
+app.get('/api/video/:id', (req, res) => {
+    const videoId = req.params.id;
+    
+    db.query(
+        'UPDATE videos SET views = views + 1 WHERE id = ?',
+        [videoId]
+    );
+    
+    db.query(
+        'SELECT * FROM videos WHERE id = ?',
+        [videoId],
+        (err, results) => {
+            if (err) {
+                res.status(500).json({ error: err.message });
+            } else if (results.length === 0) {
+                res.status(404).json({ error: 'Video not found' });
+            } else {
+                res.json(results[0]);
+            }
+        }
+    );
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
