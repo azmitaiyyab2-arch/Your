@@ -1,0 +1,110 @@
+<?php
+// Create uploads directory if it doesn't exist
+if (!file_exists('uploads/videos')) {
+    mkdir('uploads/videos', 0777, true);
+}
+if (!file_exists('uploads/thumbnails')) {
+    mkdir('uploads/thumbnails', 0777, true);
+}
+
+// Database configuration (you'll need to create this database)
+/*
+CREATE DATABASE videostream;
+USE videostream;
+
+CREATE TABLE videos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    filename VARCHAR(255) NOT NULL,
+    thumbnail VARCHAR(255),
+    upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    views INT DEFAULT 0
+);
+*/
+
+header('Content-Type: application/json');
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $response = ['success' => false, 'message' => ''];
+    
+    try {
+        $db = new PDO('mysql:host=localhost;dbname=videostream', 'username', 'password');
+        $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        
+        $title = $_POST['title'] ?? '';
+        $description = $_POST['description'] ?? '';
+        
+        // Handle video upload
+        if (isset($_FILES['video']) && $_FILES['video']['error'] === UPLOAD_ERR_OK) {
+            $videoFile = $_FILES['video'];
+            $videoExt = strtolower(pathinfo($videoFile['name'], PATHINFO_EXTENSION));
+            $allowedVideoExt = ['mp4', 'avi', 'mov', 'mkv', 'webm'];
+            
+            if (!in_array($videoExt, $allowedVideoExt)) {
+                throw new Exception('Invalid video format. Allowed: MP4, AVI, MOV, MKV, WEBM');
+            }
+            
+            if ($videoFile['size'] > 2147483648) { // 2GB
+                throw new Exception('File size too large. Maximum: 2GB');
+            }
+            
+            $videoFilename = uniqid() . '_' . time() . '.' . $videoExt;
+            $videoPath = 'uploads/videos/' . $videoFilename;
+            
+            if (!move_uploaded_file($videoFile['tmp_name'], $videoPath)) {
+                throw new Exception('Failed to upload video');
+            }
+            
+            // Handle thumbnail upload
+            $thumbnailFilename = null;
+            if (isset($_FILES['thumbnail']) && $_FILES['thumbnail']['error'] === UPLOAD_ERR_OK) {
+                $thumbnailFile = $_FILES['thumbnail'];
+                $thumbnailExt = strtolower(pathinfo($thumbnailFile['name'], PATHINFO_EXTENSION));
+                $allowedImageExt = ['jpg', 'jpeg', 'png', 'gif'];
+                
+                if (in_array($thumbnailExt, $allowedImageExt)) {
+                    $thumbnailFilename = uniqid() . '_' . time() . '.' . $thumbnailExt;
+                    $thumbnailPath = 'uploads/thumbnails/' . $thumbnailFilename;
+                    
+                    if (!move_uploaded_file($thumbnailFile['tmp_name'], $thumbnailPath)) {
+                        throw new Exception('Failed to upload thumbnail');
+                    }
+                }
+            }
+            
+            // Insert into database
+            $stmt = $db->prepare("INSERT INTO videos (title, description, filename, thumbnail) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$title, $description, $videoFilename, $thumbnailFilename]);
+            
+            $response['success'] = true;
+            $response['message'] = 'Video uploaded successfully';
+            $response['videoId'] = $db->lastInsertId();
+        } else {
+            throw new Exception('No video file uploaded');
+        }
+        
+    } catch (Exception $e) {
+        $response['message'] = $e->getMessage();
+    }
+    
+    echo json_encode($response);
+    exit;
+}
+
+// Get all videos (for loading video list)
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    try {
+        $db = new PDO('mysql:host=localhost;dbname=videostream', 'username', 'password');
+        $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        
+        $stmt = $db->query("SELECT * FROM videos ORDER BY upload_date DESC");
+        $videos = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        echo json_encode(['success' => true, 'videos' => $videos]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+?>
